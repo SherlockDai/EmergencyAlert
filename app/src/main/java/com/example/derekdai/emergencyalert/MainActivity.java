@@ -4,6 +4,11 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.media.MediaPlayer;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
@@ -62,20 +67,37 @@ public class MainActivity extends AppCompatActivity implements
     private final String url = "http://cloudserver.carma-cam.com:9001";
     private final String urlReadAll = "/readAll";
     private final String urlDownload = "/downloadFile/";
+    //TODO needs to be changed to emergencyALERTS
     private final String collection = "baddriverreports";
     private RequestQueue requestQueue;
     private Intent goToVideo;
     private final String key = "record";
+    //declare variables for timer
+    private Handler handler;
+    private final int elapsedTime = 1000 * 60 * 5;
+
+    //declare variables to play sound when update marker
+    MediaPlayer mp;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
         //Instantiate the request queue
         requestQueue = Volley.newRequestQueue(this);
+
         //initialize url and hashtable which stores mapping between _id and JSONOBject
         markerTable = new Hashtable<>();
         goToVideo = new Intent(MainActivity.this, VideoActivity.class);
         sendEmergencyAlertReportRequest();
+
+        //initialize timer (handler), 5 minus
+        handler = new Handler();
+        handler.postDelayed(runnable, elapsedTime);
+
+        //initialize MediaPlayer
+        mp = MediaPlayer.create(getApplicationContext(), R.raw.notification4update);
+
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -86,8 +108,7 @@ public class MainActivity extends AppCompatActivity implements
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
+     * This is where we can add markers or lines, add listeners or move the camera.
      * If Google Play services is not installed on the device, the user will be prompted to install
      * it inside the SupportMapFragment. This method will only be triggered once the user has
      * installed Google Play services and returned to the app.
@@ -158,6 +179,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     private void drawMarkers (JSONArray jsonArray) throws JSONException{
+        mp.start();
         mMap.clear();
         markerTable.clear();
         for(int index = 0; index < jsonArray.length(); index++){
@@ -217,4 +239,13 @@ public class MainActivity extends AppCompatActivity implements
         };
         requestQueue.add(emergencyAlertsReportRequest);
     }
+
+    private Runnable runnable = new Runnable() {
+        @Override
+        public void run() {
+            sendEmergencyAlertReportRequest();
+            //set the delay again to implement the timer
+            handler.postDelayed(this, elapsedTime);
+        }
+    };
 }
