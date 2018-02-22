@@ -1,9 +1,13 @@
 package com.example.derekdai.emergencyalert;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.location.Criteria;
 import android.location.Location;
+import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -29,6 +33,9 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.UiSettings;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -63,6 +70,7 @@ public class MainActivity extends AppCompatActivity implements
     private boolean mPermissionDenied = false;
 
     private GoogleMap mMap;
+    private UiSettings mUiSettings;
     private Hashtable<Marker, JSONObject> markerTable;
     private final String url = "http://cloudserver.carma-cam.com:9001";
     private final String urlReadAll = "/readAll";
@@ -74,7 +82,16 @@ public class MainActivity extends AppCompatActivity implements
     private final String key = "record";
     //declare variables for timer
     private Handler handler;
-    private final int elapsedTime = 1000 * 60 * 5;
+    private int elapsedTime = 1000 * 60 * 5;
+
+    private LocationManager locationManager;
+    private Criteria criteria;
+    private final double mile2M = 1.60934 * 1000;
+    private int defaultRadius = 10; //miles
+
+    private Location location;
+    private CircleOptions circleOptions;
+    private Circle circle;
 
     //declare variables to play sound when update marker
     MediaPlayer mp;
@@ -98,6 +115,10 @@ public class MainActivity extends AppCompatActivity implements
         //initialize MediaPlayer
         mp = MediaPlayer.create(getApplicationContext(), R.raw.notification4update);
 
+        //initialize location manager
+        locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+        criteria = new Criteria();
+
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -119,7 +140,14 @@ public class MainActivity extends AppCompatActivity implements
         mMap.setOnMarkerClickListener(this);
         mMap.setOnMyLocationButtonClickListener(this);
         mMap.setOnMyLocationClickListener(this);
+        mUiSettings = mMap.getUiSettings();
+
+        // Keep the UI Settings state in sync with the checkboxes.
+        mUiSettings.setZoomControlsEnabled(true);
+        mUiSettings.setCompassEnabled(true);
+
         enableMyLocation();
+
     }
 
     /**
@@ -134,16 +162,29 @@ public class MainActivity extends AppCompatActivity implements
         } else if (mMap != null) {
             // Access to the location has been granted to the app.
             mMap.setMyLocationEnabled(true);
-            onMyLocationButtonClick();
         }
     }
 
     @Override
     public boolean onMyLocationButtonClick() {
-        Toast.makeText(this, "MyLocation button clicked", Toast.LENGTH_SHORT).show();
+        try {
+            if(circle == null) {
+                location = locationManager.getLastKnownLocation(locationManager
+                        .getBestProvider(criteria, false));
+                //draw the circle to show the radius in default value
+                circleOptions = new CircleOptions().center(new LatLng(location.getLatitude(),
+                        location.getLongitude())).radius((int) (defaultRadius * mile2M)).strokeColor(0x220000FF).fillColor(0x220000FF);
+                circle = mMap.addCircle(circleOptions);
+            }
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                    circleOptions.getCenter(), getZoomLevel(circle)));
+        }
+        catch(SecurityException e){
+
+        }
         // Return false so that we don't consume the event and the default behavior still occurs
         // (the camera animates to the user's current position).
-        return false;
+        return true;
     }
 
     @Override
@@ -248,4 +289,15 @@ public class MainActivity extends AppCompatActivity implements
             handler.postDelayed(this, elapsedTime);
         }
     };
+
+    //helper function calculate zoom level based on circle size
+    public int getZoomLevel(Circle circle) {
+        int zoomLevel = 11;
+        if (circle != null) {
+            double radius = circle.getRadius() + circle.getRadius() / 2;
+            double scale = radius / 500;
+            zoomLevel = (int) (16 - Math.log(scale) / Math.log(2));
+        }
+        return zoomLevel;
+    }
 }

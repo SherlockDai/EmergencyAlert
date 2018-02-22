@@ -36,6 +36,7 @@ public class VideoActivity extends AppCompatActivity {
             String videoAddress = url + record.getString("videoClip");
             Uri uri = Uri.parse(videoAddress);
             videoView.setVideoURI(uri);
+            videoView.setMediaController(new MediaController(this));
             videoView.start();
         } catch(JSONException e){
 
