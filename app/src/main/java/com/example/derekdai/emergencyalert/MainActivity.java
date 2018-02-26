@@ -19,6 +19,8 @@ import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.view.View;
+import android.widget.Button;
 import android.widget.Toast;
 
 import com.android.volley.AuthFailureError;
@@ -78,11 +80,16 @@ public class MainActivity extends AppCompatActivity implements
     //TODO needs to be changed to emergencyALERTS
     private final String collection = "baddriverreports";
     private RequestQueue requestQueue;
+
     private Intent goToVideo;
     private final String key = "record";
+
+    private Intent goToSetting;
+    private final String settingKey = "setting";
+
     //declare variables for timer
     private Handler handler;
-    private int elapsedTime = 1000 * 60 * 5;
+    private int elapsedTime = 5; //minutes
 
     private LocationManager locationManager;
     private Criteria criteria;
@@ -108,9 +115,10 @@ public class MainActivity extends AppCompatActivity implements
         goToVideo = new Intent(MainActivity.this, VideoActivity.class);
         sendEmergencyAlertReportRequest();
 
+        goToSetting = new Intent(MainActivity.this, SettingActivity.class);
         //initialize timer (handler), 5 minus
         handler = new Handler();
-        handler.postDelayed(runnable, elapsedTime);
+        handler.postDelayed(runnable, elapsedTime * 60 * 1000);
 
         //initialize MediaPlayer
         mp = MediaPlayer.create(getApplicationContext(), R.raw.notification4update);
@@ -267,7 +275,6 @@ public class MainActivity extends AppCompatActivity implements
                 Map<String, String>  params = new HashMap<>();
                 // the POST parameters:
                 params.put("collection", collection);
-                params.put("network", "tutsplus");
                 return params;
             }
 
@@ -300,4 +307,16 @@ public class MainActivity extends AppCompatActivity implements
         }
         return zoomLevel;
     }
+
+    public void handleSettingClick(View view) throws JSONException {
+        //create bundle to put necessary information to set up the setting page
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("radius", defaultRadius);
+        jsonObject.put("elapseTime", elapsedTime);
+        String data = jsonObject.toString();
+        Bundle bundle = new Bundle();
+        bundle.putString(settingKey, data);
+        startActivityForResult(goToSetting, 1, bundle);
+    }
+
 }

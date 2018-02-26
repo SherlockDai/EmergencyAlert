@@ -11,10 +11,12 @@
         android:layout_height="wrap_content"
         android:layout_gravity="left|top"
         android:text="Setting"
+        android:id="@+id/settingButton"
         android:padding="10dp"
         android:layout_marginTop="5dp"
         android:layout_marginLeft="5dp"
         android:paddingRight="10dp"
-        android:background="#88000000"
+        android:background="?android:attr/selectableItemBackground"
+        android:onClick="handleSettingClick"
     />
 </fragment>
