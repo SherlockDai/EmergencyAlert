@@ -1,8 +1,10 @@
 package com.example.derekdai.emergencyalert;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Criteria;
@@ -73,7 +75,7 @@ public class MainActivity extends AppCompatActivity implements
 
     private GoogleMap mMap;
     private UiSettings mUiSettings;
-    private Hashtable<Marker, JSONObject> markerTable;
+    private Hashtable<Marker, String> markerTable;
     private final String url = "http://cloudserver.carma-cam.com:9001";
     private final String urlReadAll = "/readAll";
     private final String urlDownload = "/downloadFile/";
@@ -89,16 +91,27 @@ public class MainActivity extends AppCompatActivity implements
 
     //declare variables for timer
     private Handler handler;
-    private int elapsedTime = 5; //minutes
+    private int elapsedTime = 10; //minutes
 
     private LocationManager locationManager;
     private Criteria criteria;
     private final double mile2M = 1.60934 * 1000;
-    private int defaultRadius = 10; //miles
+    private int radius = 5; //miles
 
     private Location location;
     private CircleOptions circleOptions;
     private Circle circle;
+
+    private SharedPreferences sharedPref;
+
+    private Runnable runnable = new Runnable() {
+        @Override
+        public void run() {
+            sendEmergencyAlertReportRequest();
+            //set the delay again to implement the timer
+            handler.postDelayed(this, elapsedTime * 60 * 1000);
+        }
+    };
 
     //declare variables to play sound when update marker
     MediaPlayer mp;
@@ -109,6 +122,13 @@ public class MainActivity extends AppCompatActivity implements
 
         //Instantiate the request queue
         requestQueue = Volley.newRequestQueue(this);
+
+        //set the sharedPref to the shared preference of this app
+        sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+
+        //initialize the elapsedTime to 5 minutes and radius to 10 miles
+        elapsedTime = sharedPref.getInt("elapsedTime", 5);
+        radius = sharedPref.getInt("radius", 10);
 
         //initialize url and hashtable which stores mapping between _id and JSONOBject
         markerTable = new Hashtable<>();
@@ -125,6 +145,7 @@ public class MainActivity extends AppCompatActivity implements
 
         //initialize location manager
         locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+
         criteria = new Criteria();
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
@@ -142,18 +163,38 @@ public class MainActivity extends AppCompatActivity implements
      * it inside the SupportMapFragment. This method will only be triggered once the user has
      * installed Google Play services and returned to the app.
      */
+
+
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        mMap.setOnMapLoadedCallback(new GoogleMap.OnMapLoadedCallback() {
+            @Override
+            public void onMapLoaded() {
+                try {
+                    location = locationManager.getLastKnownLocation(locationManager
+                            .getBestProvider(criteria, false));
+                    //draw the circle to show the radius in default value
+                    circleOptions = new CircleOptions().center(new LatLng(location.getLatitude(),
+                            location.getLongitude())).radius((int) (radius * mile2M)).strokeColor(0x220000FF).fillColor(0x220000FF);
+                    circle = mMap.addCircle(circleOptions);
+                    CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(new LatLng(location.getLatitude(), location.getLongitude()));
+                    mMap.moveCamera(cameraUpdate);
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            circleOptions.getCenter(), getZoomLevel(circle)));
+                } catch (SecurityException e) {
+
+                }
+            }
+        });
+
+
         mMap.setOnMarkerClickListener(this);
         mMap.setOnMyLocationButtonClickListener(this);
         mMap.setOnMyLocationClickListener(this);
         mUiSettings = mMap.getUiSettings();
-
-        // Keep the UI Settings state in sync with the checkboxes.
         mUiSettings.setZoomControlsEnabled(true);
         mUiSettings.setCompassEnabled(true);
-
         enableMyLocation();
 
     }
@@ -175,21 +216,8 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public boolean onMyLocationButtonClick() {
-        try {
-            if(circle == null) {
-                location = locationManager.getLastKnownLocation(locationManager
-                        .getBestProvider(criteria, false));
-                //draw the circle to show the radius in default value
-                circleOptions = new CircleOptions().center(new LatLng(location.getLatitude(),
-                        location.getLongitude())).radius((int) (defaultRadius * mile2M)).strokeColor(0x220000FF).fillColor(0x220000FF);
-                circle = mMap.addCircle(circleOptions);
-            }
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                    circleOptions.getCenter(), getZoomLevel(circle)));
-        }
-        catch(SecurityException e){
-
-        }
+        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                circleOptions.getCenter(), getZoomLevel(circle)));
         // Return false so that we don't consume the event and the default behavior still occurs
         // (the camera animates to the user's current position).
         return true;
@@ -218,33 +246,45 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public boolean onMarkerClick(final Marker marker){
-        JSONObject correspondObject = markerTable.get(marker);
-        Bundle bundle = new Bundle();
-        bundle.putString(key, correspondObject.toString());
-        goToVideo.putExtras(bundle);
-        startActivity(goToVideo);
+    public boolean onMarkerClick (final Marker marker){
+        try {
+            JSONObject correspondObject = new JSONObject(markerTable.get(marker));
+            Bundle bundle = new Bundle();
+            bundle.putString(key, correspondObject.toString());
+            goToVideo.putExtras(bundle);
+            startActivity(goToVideo);
+        } catch (JSONException e){
+            System.out.println(e.getMessage());
+        }
         return true;
     }
 
     private void drawMarkers (JSONArray jsonArray) throws JSONException{
-        mp.start();
-        mMap.clear();
-        markerTable.clear();
+        boolean hasNew = false;
+        Hashtable<Marker, String> newMarkerTable = new Hashtable<>();
+        //add new markers
         for(int index = 0; index < jsonArray.length(); index++){
             JSONObject tempJSONObject = jsonArray.getJSONObject(index);
             String[] coordinates = tempJSONObject.getString("location").split(",");
             if(coordinates[0].equals("null") || coordinates[1].equals("null")){
                 continue;
             }
+            if(!markerTable.containsValue(tempJSONObject.toString())){
+                hasNew = true;
+            }
             LatLng tempPoint = new LatLng(Double.parseDouble(coordinates[0]),
                     Double.parseDouble(coordinates[1]));
             Marker tempMarker = mMap.addMarker(new MarkerOptions().position(tempPoint)
                     .title(tempJSONObject.getString("time")));
-            markerTable.put(tempMarker, tempJSONObject);
 
+            newMarkerTable.put(tempMarker, tempJSONObject.toString());
         }
-
+        if(hasNew) mp.start();
+        //delete expired markers
+        for(Hashtable.Entry<Marker, String> entry : markerTable.entrySet()){
+            entry.getKey().remove();
+        }
+        markerTable = newMarkerTable;
     }
 
     private void sendEmergencyAlertReportRequest(){
@@ -288,15 +328,6 @@ public class MainActivity extends AppCompatActivity implements
         requestQueue.add(emergencyAlertsReportRequest);
     }
 
-    private Runnable runnable = new Runnable() {
-        @Override
-        public void run() {
-            sendEmergencyAlertReportRequest();
-            //set the delay again to implement the timer
-            handler.postDelayed(this, elapsedTime);
-        }
-    };
-
     //helper function calculate zoom level based on circle size
     public int getZoomLevel(Circle circle) {
         int zoomLevel = 11;
@@ -311,12 +342,49 @@ public class MainActivity extends AppCompatActivity implements
     public void handleSettingClick(View view) throws JSONException {
         //create bundle to put necessary information to set up the setting page
         JSONObject jsonObject = new JSONObject();
-        jsonObject.put("radius", defaultRadius);
-        jsonObject.put("elapseTime", elapsedTime);
+        jsonObject.put("radius", radius);
+        jsonObject.put("elapsedTime", elapsedTime);
         String data = jsonObject.toString();
         Bundle bundle = new Bundle();
         bundle.putString(settingKey, data);
-        startActivityForResult(goToSetting, 1, bundle);
+        goToSetting.putExtras(bundle);
+        //noinspection RestrictedApi
+        startActivityForResult(goToSetting, 1);
     }
 
+    //handle updates from setting page
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        switch(requestCode) {
+            case (1) : {
+                if (resultCode == Activity.RESULT_OK) {
+                    String returnValue = data.getStringExtra(settingKey);
+                    try {
+                        JSONObject returnJSON = new JSONObject(returnValue);
+                        updateSettings(returnJSON.getInt("elapsedTime"),
+                                returnJSON.getInt("radius"));
+
+
+                    } catch (JSONException e){
+                        System.out.print(e.getMessage());
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    //helper function, update the frequency and radius, redraw circle
+    private void updateSettings(int updatedFreq, int updatedRadius){
+        circle.setRadius(updatedRadius * mile2M);
+        //update the shared preference
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putInt("elapsedTime", updatedFreq);
+        editor.putInt("radius", updatedRadius);
+        editor.commit();
+        elapsedTime = updatedFreq;
+        radius = updatedRadius;
+
+    }
 }
