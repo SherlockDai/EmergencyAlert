@@ -22,7 +22,7 @@ public class SettingActivity extends AppCompatActivity {
     private SeekBar radiusBar;
     private SeekBar freqBar;
     private final int maxRadius = 20;//miles
-    private final int maxUpdateFrequency = 5;//minutes
+    private final int maxUpdateFrequency = 30;//minutes
     private SeekBar.OnSeekBarChangeListener radiusSeekBarChangeListener;
     private SeekBar.OnSeekBarChangeListener freqSeekBarChangeListener;
     private Button saveButton;

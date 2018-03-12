@@ -50,6 +50,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Map;
 
@@ -80,7 +81,8 @@ public class MainActivity extends AppCompatActivity implements
     private final String urlReadAll = "/readAll";
     private final String urlDownload = "/downloadFile/";
     //TODO needs to be changed to emergencyALERTS
-    private final String collection = "baddriverreports";
+    private final String collectionBad = "baddriverreports";
+    private final String collectionEmergency = "emergencyalerts";
     private RequestQueue requestQueue;
 
     private Intent goToVideo;
@@ -104,10 +106,14 @@ public class MainActivity extends AppCompatActivity implements
 
     private SharedPreferences sharedPref;
 
+    private JSONArray emergencyAlerts = null, badDriverReports = null;
+
     private Runnable runnable = new Runnable() {
         @Override
         public void run() {
-            sendEmergencyAlertReportRequest();
+            emergencyAlerts = null; badDriverReports = null;
+            sendBadDriverReportRequest();
+            sendEmergencyAlertsRequest();
             //set the delay again to implement the timer
             handler.postDelayed(this, elapsedTime * 60 * 1000);
         }
@@ -133,7 +139,8 @@ public class MainActivity extends AppCompatActivity implements
         //initialize url and hashtable which stores mapping between _id and JSONOBject
         markerTable = new Hashtable<>();
         goToVideo = new Intent(MainActivity.this, VideoActivity.class);
-        sendEmergencyAlertReportRequest();
+        sendBadDriverReportRequest();
+        sendEmergencyAlertsRequest();
 
         goToSetting = new Intent(MainActivity.this, SettingActivity.class);
         //initialize timer (handler), 5 minus
@@ -185,6 +192,28 @@ public class MainActivity extends AppCompatActivity implements
                 } catch (SecurityException e) {
 
                 }
+            }
+        });
+
+        mMap.setOnMarkerDragListener(new GoogleMap.OnMarkerDragListener() {
+
+            @Override
+            public void onMarkerDragStart(Marker marker) {
+                // TODO Auto-generated method stub
+                //simulate the long click on marker
+                Toast.makeText(MainActivity.this, "long click!", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onMarkerDragEnd(Marker marker) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void onMarkerDrag(Marker marker) {
+                // TODO Auto-generated method stub
+
             }
         });
 
@@ -259,12 +288,22 @@ public class MainActivity extends AppCompatActivity implements
         return true;
     }
 
-    private void drawMarkers (JSONArray jsonArray) throws JSONException{
+    private void drawMarkers () throws JSONException{
         boolean hasNew = false;
         Hashtable<Marker, String> newMarkerTable = new Hashtable<>();
+        HashSet<String> emergencySet = new HashSet<>();
+        //get all emergency ids
+        for(int index = 0; index < emergencyAlerts.length(); index++){
+            JSONObject tempJSONObject = emergencyAlerts.getJSONObject(index);
+            emergencySet.add(tempJSONObject.getString("report"));
+        }
         //add new markers
-        for(int index = 0; index < jsonArray.length(); index++){
-            JSONObject tempJSONObject = jsonArray.getJSONObject(index);
+        for(int index = 0; index < badDriverReports.length(); index++){
+            JSONObject tempJSONObject = badDriverReports.getJSONObject(index);
+            String id = tempJSONObject.getString("_id");
+            if(!emergencySet.contains(id)){
+                continue;
+            }
             String[] coordinates = tempJSONObject.getString("location").split(",");
             if(coordinates[0].equals("null") || coordinates[1].equals("null")){
                 continue;
@@ -274,7 +313,7 @@ public class MainActivity extends AppCompatActivity implements
             }
             LatLng tempPoint = new LatLng(Double.parseDouble(coordinates[0]),
                     Double.parseDouble(coordinates[1]));
-            Marker tempMarker = mMap.addMarker(new MarkerOptions().position(tempPoint)
+            Marker tempMarker = mMap.addMarker(new MarkerOptions().draggable(true).position(tempPoint)
                     .title(tempJSONObject.getString("time")));
 
             newMarkerTable.put(tempMarker, tempJSONObject.toString());
@@ -287,16 +326,18 @@ public class MainActivity extends AppCompatActivity implements
         markerTable = newMarkerTable;
     }
 
-    private void sendEmergencyAlertReportRequest(){
+    private void sendBadDriverReportRequest(){
+        //set both
         //send out the post request to back-end API for all emergency alert reports
-        StringRequest emergencyAlertsReportRequest = new StringRequest(Request.Method.POST,
+        final StringRequest emergencyAlertsReportRequest = new StringRequest(Request.Method.POST,
                 url + urlReadAll,
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
                         try{
-                            JSONArray jsonResponse = new JSONArray(response);
-                            drawMarkers(jsonResponse);
+                            badDriverReports = new JSONArray(response);
+                            if(badDriverReports != null && emergencyAlerts != null)
+                                drawMarkers();
                         }
                         catch(JSONException e){
 
@@ -314,7 +355,50 @@ public class MainActivity extends AppCompatActivity implements
             protected Map<String, String> getParams(){
                 Map<String, String>  params = new HashMap<>();
                 // the POST parameters:
-                params.put("collection", collection);
+                params.put("collection", collectionBad);
+                return params;
+            }
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                Map<String, String>  params = new HashMap<String, String>();
+                params.put("Content-Type", "application/x-www-form-urlencoded");
+                return params;
+            }
+        };
+        requestQueue.add(emergencyAlertsReportRequest);
+    }
+
+    private void sendEmergencyAlertsRequest(){
+        //set both
+        //send out the post request to back-end API for all emergency alert reports
+        final StringRequest emergencyAlertsReportRequest = new StringRequest(Request.Method.POST,
+                url + urlReadAll,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        try{
+                            emergencyAlerts = new JSONArray(response);
+                            if(badDriverReports != null && emergencyAlerts != null)
+                                drawMarkers();
+                        }
+                        catch(JSONException e){
+
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        error.printStackTrace();
+                    }
+                }
+        ){
+            @Override
+            protected Map<String, String> getParams(){
+                Map<String, String>  params = new HashMap<>();
+                // the POST parameters:
+                params.put("collection", collectionEmergency);
                 return params;
             }
 
@@ -387,4 +471,5 @@ public class MainActivity extends AppCompatActivity implements
         radius = updatedRadius;
 
     }
+    
 }
