@@ -507,7 +507,7 @@ public class MainActivity extends AppCompatActivity implements
 
 
                     } catch (JSONException e){
-                        System.out.print(e.getMessage());
+                        System.out.print(e.getMessage());·
                     }
                 }
                 break;
@@ -525,6 +525,9 @@ public class MainActivity extends AppCompatActivity implements
         editor.commit();
         elapsedTime = updatedFreq;
         radius = updatedRadius;
+
+        sendBadDriverReportRequest();
+        sendEmergencyAlertsRequest();
 
     }
     
