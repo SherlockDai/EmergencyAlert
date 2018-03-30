@@ -4,12 +4,38 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
-    tools:context=".MainActivity" >
+    tools:context=".MainActivity"
+    android:orientation="vertical" >
+
 
     <VideoView
         android:id="@+id/EmergencyVideo"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
-        android:layout_centerInParent="true" />
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerVertical="true"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:gravity="center">
+        <Button
+            android:id="@+id/respondBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Respond"/>
+        <Button
+            android:id="@+id/rejectBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Reject"/>
+        <Button
+            android:id="@+id/resolveBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Resolved"/>
+    </LinearLayout>
+
 
 </RelativeLayout>

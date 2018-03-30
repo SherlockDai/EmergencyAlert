@@ -48,7 +48,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -290,13 +293,13 @@ public class MainActivity extends AppCompatActivity implements
             Bundle bundle = new Bundle();
             bundle.putString(key, correspondObject.toString());
             goToVideo.putExtras(bundle);
-            startActivity(goToVideo);
+            startActivityForResult(goToVideo, 2);
         } catch (JSONException e){
             System.out.println(e.getMessage());
         }
     }
 
-    private void drawMarkers () throws JSONException{
+    private void drawMarkers () throws JSONException, ParseException{
         /*boolean hasNew = false;
         Hashtable<Marker, String> newMarkerTable = new Hashtable<>();
         //add new markers
@@ -324,32 +327,56 @@ public class MainActivity extends AppCompatActivity implements
         markerTable = newMarkerTable;*/
         boolean hasNew = false;
         Hashtable<Marker, String> newMarkerTable = new Hashtable<>();
-        HashSet<String> emergencySet = new HashSet<>();
+        Hashtable<String, JSONObject> emergencySet = new Hashtable<>();
         //get all emergency ids
         for(int index = 0; index < emergencyAlerts.length(); index++){
             JSONObject tempJSONObject = emergencyAlerts.getJSONObject(index);
-            emergencySet.add(tempJSONObject.getString("report"));
+            emergencySet.put(tempJSONObject.getString("report"), tempJSONObject);
         }
         //add new markers
         for(int index = 0; index < badDriverReports.length(); index++){
             JSONObject tempJSONObject = badDriverReports.getJSONObject(index);
             String id = tempJSONObject.getString("_id");
-            if(!emergencySet.contains(id)){
+            if(!emergencySet.containsKey(id)){
                 continue;
             }
-            String[] coordinates = tempJSONObject.getString("location").split(",");
-            if(coordinates[0].equals("null") || coordinates[1].equals("null")){
+            JSONObject jsonObject = emergencySet.get(id);
+            jsonObject.put("videoClip", tempJSONObject.getString("videoClip"));
+            JSONArray coordinates = jsonObject.getJSONObject("location").
+                    getJSONArray("coordinates");
+            if(coordinates.getString(0).equals("null") ||
+                    coordinates.getString(1).equals("null")){
                 continue;
             }
-            if(!markerTable.containsValue(tempJSONObject.toString())){
+            if(!markerTable.containsValue(jsonObject.toString())){
                 hasNew = true;
             }
-            LatLng tempPoint = new LatLng(Double.parseDouble(coordinates[0]),
-                    Double.parseDouble(coordinates[1]));
-            Marker tempMarker = mMap.addMarker(new MarkerOptions().draggable(true).position(tempPoint)
-                    .title(tempJSONObject.getString("time")));
-            tempMarker.setSnippet("Number of respondings: ● ● ●");
-            newMarkerTable.put(tempMarker, tempJSONObject.toString());
+            LatLng tempPoint = new LatLng(Double.parseDouble(coordinates.getString(1)),
+                    Double.parseDouble(coordinates.getString(0)));
+            Marker tempMarker = mMap.addMarker(new MarkerOptions().draggable(true).position(tempPoint));
+            SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+            SimpleDateFormat outputFormat = new SimpleDateFormat("HH:mm:ss");
+            Date date = inputFormat.parse(jsonObject.getString("reportedAt"));
+            String formattedTime = outputFormat.format(date);
+            tempMarker.setTitle(formattedTime);
+            if(jsonObject.has("reject") && jsonObject.getInt("reject") == 1){
+                tempMarker.setSnippet("Case is rejected");
+            }
+            else if(jsonObject.has("resolved") && jsonObject.getInt("resolved") == 1){
+                tempMarker.setSnippet("Case is resolved");
+            }
+            else if(jsonObject.has("respond") && jsonObject.getInt("respond") >= 1){
+                StringBuilder sb = new StringBuilder();
+                for(int i = 1; i <= jsonObject.getInt("respond"); i++){
+                    sb.append("● ");
+                }
+                tempMarker.setSnippet("Number of responding: " + sb.toString());
+            }
+            else{
+                tempMarker.setSnippet("Needs action!");
+            }
+
+            newMarkerTable.put(tempMarker, jsonObject.toString());
         }
 
         if(hasNew) mp.start();
@@ -373,7 +400,7 @@ public class MainActivity extends AppCompatActivity implements
                             if(badDriverReports != null && emergencyAlerts != null)
                                 drawMarkers();
                         }
-                        catch(JSONException e){
+                        catch(Exception e){
 
                         }
                     }
@@ -427,7 +454,7 @@ public class MainActivity extends AppCompatActivity implements
                             if(badDriverReports != null && emergencyAlerts != null)
                                 drawMarkers();
                         }
-                        catch(JSONException e){
+                        catch(Exception e){
 
                         }
                     }
@@ -504,13 +531,15 @@ public class MainActivity extends AppCompatActivity implements
                         JSONObject returnJSON = new JSONObject(returnValue);
                         updateSettings(returnJSON.getInt("elapsedTime"),
                                 returnJSON.getInt("radius"));
-
-
                     } catch (JSONException e){
                         System.out.print(e.getMessage());
                     }
                 }
                 break;
+            }
+            case(2):{
+                    sendBadDriverReportRequest();
+                    sendEmergencyAlertsRequest();
             }
         }
     }
