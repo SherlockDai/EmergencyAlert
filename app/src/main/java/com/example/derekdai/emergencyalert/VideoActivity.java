@@ -41,7 +41,11 @@ public class VideoActivity extends AppCompatActivity {
 
     private RequestQueue requestQueue;
 
-    JSONObject record;
+    private Intent intentExtras;
+
+    private Bundle extrasBundle;
+
+    private JSONObject record;
     @Override
     protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
@@ -72,8 +76,8 @@ public class VideoActivity extends AppCompatActivity {
                 onButtonClick(v, respondButton);
             }
         });
-        Intent intentExtras = getIntent();
-        Bundle extrasBundle = intentExtras.getExtras();
+        intentExtras = getIntent();
+        extrasBundle = intentExtras.getExtras();
         if(!extrasBundle.isEmpty() && extrasBundle.containsKey(key)){
             try {
                 record = new JSONObject(extrasBundle.getString(key));
@@ -90,8 +94,31 @@ public class VideoActivity extends AppCompatActivity {
             videoView.setVideoURI(uri);
             videoView.setMediaController(new MediaController(this));
             videoView.start();
+            if(record.has("action")){
+                if(record.getJSONObject("action").getString("action").equals("respond")){
+                    respondButton.setEnabled(false);
+                }
+                else if(record.getJSONObject("action").getString("action").equals("resolve")){
+                    resolveButton.setEnabled(false);
+                }
+                else if(record.getJSONObject("action").getString("action").equals("reject")){
+                    rejectButton.setEnabled(false);
+                }
+            }
+            else{
+                if(record.has("reject") && record.getInt("reject") == 1){
+                    respondButton.setEnabled(false);
+                    rejectButton.setEnabled(false);
+                    resolveButton.setEnabled(false);
+                }
+                else if(record.has("resolve") && record.getInt("resolve") == 1){
+                    respondButton.setEnabled(false);
+                    rejectButton.setEnabled(false);
+                    resolveButton.setEnabled(false);
+                }
+            }
         } catch(JSONException e){
-
+            System.out.println(e.getMessage());
         }
     }
 
@@ -161,10 +188,13 @@ public class VideoActivity extends AppCompatActivity {
                         }
                         case "Reject":{
                             newData.put("reject", 1);
+                            newData.put("resolved", 0);
                             break;
                         }
                         case "Resolved":{
                             newData.put("resolved", 1);
+                            newData.put("reject", 0);
+                            break;
                         }
                     }
 
@@ -189,9 +219,39 @@ public class VideoActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed(){
-        super.onBackPressed();
         Intent resultIntent = new Intent();
+        JSONObject resultObject = new JSONObject();
+        try {
+            if(!respondButton.isEnabled() && !resolveButton.isEnabled() && !rejectButton.isEnabled()){
+                setResult(Activity.RESULT_CANCELED, resultIntent);
+                finish();
+            }
+            if (!respondButton.isEnabled()) {
+                resultObject.put("id", record.getString("_id"));
+                resultObject.put("action", "respond");
+                resultObject.put("reportedAt", record.getString("reportedAt"));
+            }
+            else if(!resolveButton.isEnabled()){
+                resultObject.put("id", record.getString("_id"));
+                resultObject.put("action", "resolve");
+                resultObject.put("reportedAt", record.getString("reportedAt"));
+            }
+            else if(!rejectButton.isEnabled()){
+                resultObject.put("id", record.getString("_id"));
+                resultObject.put("action", "reject");
+                resultObject.put("reportedAt", record.getString("reportedAt"));
+            }
+            else{
+                setResult(Activity.RESULT_CANCELED, resultIntent);
+                finish();
+            }
+        } catch(JSONException e){
+            System.out.println(e.getMessage());
+        }
+        resultIntent.putExtra(key, resultObject.toString());
         setResult(Activity.RESULT_OK, resultIntent);
+
+        super.onBackPressed();
         finish();
     }
 

@@ -48,6 +48,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -55,6 +56,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements
@@ -92,9 +94,11 @@ public class MainActivity extends AppCompatActivity implements
 
     private Intent goToVideo;
     private final String key = "record";
+    private final int videoCode = 2;
 
     private Intent goToSetting;
     private final String settingKey = "setting";
+    private final int settingCode = 1;
 
     //declare variables for timer
     private Handler handler;
@@ -113,12 +117,30 @@ public class MainActivity extends AppCompatActivity implements
 
     private JSONArray emergencyAlerts = null, badDriverReports = null;
 
+    private JSONObject actions;
+
     private Runnable runnable = new Runnable() {
         @Override
         public void run() {
             emergencyAlerts = null; badDriverReports = null;
             sendBadDriverReportRequest();
             sendEmergencyAlertsRequest();
+            //clear up shared preference if it is updated 30 minutes ago
+            SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+            Long currentTime = System.currentTimeMillis();
+            Iterator<String> iterator = actions.keys();
+            while (iterator.hasNext()) {
+                String key = iterator.next();
+                try {
+                    String timeStamp = actions.getJSONObject(key).getString("timeStamp");
+                    Long timeStampMiliSec = timeFormat.parse(timeStamp).getTime();
+                    if(currentTime - timeStampMiliSec > 1800000){
+                        iterator.remove();
+                    }
+                } catch (Exception e) {
+                    // Something went wrong!
+                }
+            }
             //set the delay again to implement the timer
             handler.postDelayed(this, elapsedTime * 60 * 1000);
         }
@@ -140,6 +162,11 @@ public class MainActivity extends AppCompatActivity implements
         //initialize the elapsedTime to 5 minutes and radius to 10 miles
         elapsedTime = sharedPref.getInt("elapsedTime", 5);
         radius = sharedPref.getInt("radius", 10);
+        try {
+            actions = new JSONObject(sharedPref.getString("actions", "{}"));
+        } catch(JSONException e){
+            System.out.println(e.getMessage());
+        }
 
         //initialize url and hashtable which stores mapping between _id and JSONOBject
         markerTable = new Hashtable<>();
@@ -290,10 +317,14 @@ public class MainActivity extends AppCompatActivity implements
     public void onInfoWindowClick(final Marker marker){
         try {
             JSONObject correspondObject = new JSONObject(markerTable.get(marker));
+            String id = correspondObject.getString("_id");
+            if(actions.has(id)){
+                correspondObject.put("action", actions.get(id));
+            }
             Bundle bundle = new Bundle();
             bundle.putString(key, correspondObject.toString());
             goToVideo.putExtras(bundle);
-            startActivityForResult(goToVideo, 2);
+            startActivityForResult(goToVideo, videoCode);
         } catch (JSONException e){
             System.out.println(e.getMessage());
         }
@@ -516,7 +547,7 @@ public class MainActivity extends AppCompatActivity implements
         bundle.putString(settingKey, data);
         goToSetting.putExtras(bundle);
         //noinspection RestrictedApi
-        startActivityForResult(goToSetting, 1);
+        startActivityForResult(goToSetting, settingCode);
     }
 
     //handle updates from setting page
@@ -524,7 +555,7 @@ public class MainActivity extends AppCompatActivity implements
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         switch(requestCode) {
-            case (1) : {
+            case (settingCode) : {
                 if (resultCode == Activity.RESULT_OK) {
                     String returnValue = data.getStringExtra(settingKey);
                     try {
@@ -537,9 +568,28 @@ public class MainActivity extends AppCompatActivity implements
                 }
                 break;
             }
-            case(2):{
+            case(videoCode):{
+                if (resultCode == Activity.RESULT_OK) {
+                    String returnValue = data.getStringExtra(key);
+                    try {
+                        JSONObject returnJSON = new JSONObject(returnValue);
+                        JSONObject value = new JSONObject();
+                        value.put("action", returnJSON.getString("action"));
+                        value.put("timeStamp", returnJSON.getString("reportedAt"));
+                        actions.put(returnJSON.getString("id"), value);
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putString("action", actions.toString());
+                        editor.commit();
+                    } catch (JSONException e){
+                        System.out.print(e.getMessage());
+                    }
+                }
+                else if(resultCode == Activity.RESULT_CANCELED){
+                    //TODO currently we do nothing when user did not react to the case
+                }
                     sendBadDriverReportRequest();
                     sendEmergencyAlertsRequest();
+
             }
         }
     }
