@@ -83,10 +83,9 @@ public class MainActivity extends AppCompatActivity implements
     private GoogleMap mMap;
     private UiSettings mUiSettings;
     private Hashtable<Marker, String> markerTable;
-    private final String url = "http://cloudserver.carma-cam.com:9001";
+    private final String url = "https://cloudserver.carma-cam.com";
     private final String urlReadAll = "/readAll";
     private final String urlReadByRaidus = "/readByRadius";
-    private final String urlDownload = "/downloadFile/";
     //TODO needs to be changed to emergencyALERTS
     private final String collectionBad = "baddriverreports";
     private final String collectionEmergency = "emergencyalerts";
@@ -129,11 +128,14 @@ public class MainActivity extends AppCompatActivity implements
             SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
             Long currentTime = System.currentTimeMillis();
             Iterator<String> iterator = actions.keys();
+            System.out.println(actions.toString());
             while (iterator.hasNext()) {
                 String key = iterator.next();
                 try {
                     String timeStamp = actions.getJSONObject(key).getString("timeStamp");
                     Long timeStampMiliSec = timeFormat.parse(timeStamp).getTime();
+                    System.out.println(timeStampMiliSec);
+                    System.out.println(currentTime);
                     if(currentTime - timeStampMiliSec > 1800000){
                         iterator.remove();
                     }
@@ -158,12 +160,11 @@ public class MainActivity extends AppCompatActivity implements
 
         //set the sharedPref to the shared preference of this app
         sharedPref = this.getPreferences(Context.MODE_PRIVATE);
-
         //initialize the elapsedTime to 5 minutes and radius to 10 miles
         elapsedTime = sharedPref.getInt("elapsedTime", 5);
         radius = sharedPref.getInt("radius", 10);
         try {
-            actions = new JSONObject(sharedPref.getString("actions", "{}"));
+            actions = new JSONObject(sharedPref.getString("action", "{}"));
         } catch(JSONException e){
             System.out.println(e.getMessage());
         }
@@ -577,9 +578,11 @@ public class MainActivity extends AppCompatActivity implements
                         value.put("action", returnJSON.getString("action"));
                         value.put("timeStamp", returnJSON.getString("reportedAt"));
                         actions.put(returnJSON.getString("id"), value);
+                        System.out.println(actions.toString());
                         SharedPreferences.Editor editor = sharedPref.edit();
                         editor.putString("action", actions.toString());
                         editor.commit();
+                        System.out.println(sharedPref.getAll().toString());
                     } catch (JSONException e){
                         System.out.print(e.getMessage());
                     }

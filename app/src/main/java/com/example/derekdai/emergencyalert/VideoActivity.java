@@ -33,8 +33,8 @@ import java.util.Map;
 
 public class VideoActivity extends AppCompatActivity {
     private final String key = "record";
-    private final String url = "http://cloudserver.carma-cam.com:9001/downloadFile/";
-    private final String updateUrl = "http://cloudserver.carma-cam.com:9001/update";
+    private final String url = "https://cloudserver.carma-cam.com/downloadFile/";
+    private final String updateUrl = "https://cloudserver.carma-cam.com/update";
 
     //declare all action buttons
     private Button respondButton, rejectButton, resolveButton;
