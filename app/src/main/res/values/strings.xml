@@ -10,4 +10,5 @@
     <string name="title_notifications">Notifications</string>
     <string name="title_save_button">SAVE</string>
     <string name="title_cancel_button">CANCEL</string>
+    <string name="logo">logo</string>
 </resources>

@@ -83,7 +83,7 @@ public class MainActivity extends AppCompatActivity implements
     private GoogleMap mMap;
     private UiSettings mUiSettings;
     private Hashtable<Marker, String> markerTable;
-    private final String url = "https://cloudserver.carma-cam.com";
+    private final String url = "http://cloudserver.carma-cam.com:9001";
     private final String urlReadAll = "/readAll";
     private final String urlReadByRaidus = "/readByRadius";
     //TODO needs to be changed to emergencyALERTS
@@ -148,12 +148,24 @@ public class MainActivity extends AppCompatActivity implements
         }
     };
 
+    private Intent loginIntent;
+    private Bundle loginBundle;
+    private JSONObject userData;
+
     //declare variables to play sound when update marker
     MediaPlayer mp;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        loginIntent = getIntent();
+        loginBundle = loginIntent.getExtras();
+        try {
+            userData = new JSONObject(loginBundle.getString("user"));
+        } catch(JSONException e){
+            e.printStackTrace();
+        }
 
         //Instantiate the request queue
         requestQueue = Volley.newRequestQueue(this);
@@ -259,7 +271,13 @@ public class MainActivity extends AppCompatActivity implements
         mUiSettings.setZoomControlsEnabled(true);
         mUiSettings.setCompassEnabled(true);
         enableMyLocation();
-
+        try {
+            Toast.makeText(MainActivity.this, "Welcome back " +
+                    userData.getString("fname") + ' ' +
+                    userData.getString("lname"), Toast.LENGTH_LONG).show();
+        } catch(JSONException e){
+            e.printStackTrace();
+        }
     }
 
     /**
