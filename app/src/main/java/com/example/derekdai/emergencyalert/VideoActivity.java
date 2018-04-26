@@ -33,8 +33,10 @@ import java.util.Map;
 
 public class VideoActivity extends AppCompatActivity {
     private final String key = "record";
-    private final String url = "http://cloudserver.carma-cam.com:9001/downloadFile/";
-    private final String updateUrl = "http://cloudserver.carma-cam.com:9001/update";
+    private final String url = "https://cloudserver.carma-cam.com/downloadFile/";
+    private final String resolveURL = "https://cloudserver.carma-cam.com/resolveAnAlert";
+    private final String rejectURL = "https://cloudserver.carma-cam.com/rejectAnAlert";
+    private final String respondURL = "https://cloudserver.carma-cam.com/respondAnAlert";
 
     //declare all action buttons
     private Button respondButton, rejectButton, resolveButton;
@@ -150,6 +152,21 @@ public class VideoActivity extends AppCompatActivity {
     private void sendUpdateRequest(final Button btn){
         //set both
         //send out the post request to back-end API for all emergency alert reports
+        String updateUrl = "";
+        switch (btn.getText().toString()){
+            case "Resolve": {
+                updateUrl = resolveURL;
+                break;
+            }
+            case "Reject": {
+                updateUrl = rejectURL;
+                break;
+            }
+            case "Respond": {
+                updateUrl = respondURL;
+                break;
+            }
+        }
         final StringRequest updateRequest = new StringRequest(Request.Method.POST,
                 updateUrl,
                 new Response.Listener<String>() {
@@ -169,41 +186,13 @@ public class VideoActivity extends AppCompatActivity {
             protected Map<String, String> getParams(){
                 Map<String, String>  params = new HashMap<>();
                 // the POST parameters:
-                params.put("collection", "emergencyalerts");
-                String btnText = btn.getText().toString();
-                try {
-                    JSONObject newData = new JSONObject();
-                    switch (btnText) {
-                        case "Respond": {
-                            //first find out if some one has responded already
-                            if (!record.has("respond")) {
-                                newData.put("respond", 1);
-                            } else {
-                                int num = Integer.parseInt(record.getString("respond")) + 1;
-                                newData.put("respond", num);
-                            }
-                            newData.put("reject", 0);
-                            newData.put("resolved", 0);
-                            break;
-                        }
-                        case "Reject":{
-                            newData.put("reject", 1);
-                            newData.put("resolved", 0);
-                            break;
-                        }
-                        case "Resolved":{
-                            newData.put("resolved", 1);
-                            newData.put("reject", 0);
-                            break;
-                        }
-                    }
-
-                    params.put("_id", record.getString("_id"));
-                    params.put("newData", newData.toString());
+                try{
+                    params.put("alertId", record.getString("_id"));
+                    params.put("phone", record.getString("phone"));
+                    params.put("password", record.getString("password"));
                 } catch(JSONException e){
-
+                    e.printStackTrace();
                 }
-
                 return params;
             }
 

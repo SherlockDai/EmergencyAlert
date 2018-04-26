@@ -40,7 +40,7 @@ public class LoginActivity extends AppCompatActivity {
 
     private Intent goToMain;
 
-    private String authURL = "https://carma-cam-test-backend.yj83leetest.space/9010/getPoliceAccountByPhone";
+    private String authURL = "https://cloudserver.carma-cam.com/getPoliceAccountByPhone";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,6 +112,7 @@ public class LoginActivity extends AppCompatActivity {
                                 Toast.makeText(LoginActivity.this, respJSON.getString("error"), Toast.LENGTH_LONG).show();
                             }
                             else{
+                                respJSON.put("password", password);
                                 String data = respJSON.toString();
                                 Bundle bundle = new Bundle();
                                 bundle.putString("user", data);

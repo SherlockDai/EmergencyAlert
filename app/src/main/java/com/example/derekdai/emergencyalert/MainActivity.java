@@ -83,11 +83,9 @@ public class MainActivity extends AppCompatActivity implements
     private GoogleMap mMap;
     private UiSettings mUiSettings;
     private Hashtable<Marker, String> markerTable;
-    private final String url = "http://cloudserver.carma-cam.com:9001";
-    private final String urlReadAll = "/readAll";
-    private final String urlReadByRaidus = "/readByRadius";
-    //TODO needs to be changed to emergencyALERTS
-    private final String collectionBad = "baddriverreports";
+    private final String url = "https://cloudserver.carma-cam.com";
+    private final String urlReadByRaidus = "/readEmergencyAlertsByRadius";
+    private final String urlGetReport = "/getreport";
     private final String collectionEmergency = "emergencyalerts";
     private RequestQueue requestQueue;
 
@@ -114,15 +112,14 @@ public class MainActivity extends AppCompatActivity implements
 
     private SharedPreferences sharedPref;
 
-    private JSONArray emergencyAlerts = null, badDriverReports = null;
+    private JSONArray emergencyAlerts = null;
 
     private JSONObject actions;
 
     private Runnable runnable = new Runnable() {
         @Override
         public void run() {
-            emergencyAlerts = null; badDriverReports = null;
-            sendBadDriverReportRequest();
+            emergencyAlerts = null;
             sendEmergencyAlertsRequest();
             //clear up shared preference if it is updated 30 minutes ago
             SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
@@ -224,7 +221,6 @@ public class MainActivity extends AppCompatActivity implements
                 try {
                     location = locationManager.getLastKnownLocation(locationManager
                             .getBestProvider(criteria, false));
-                    sendBadDriverReportRequest();
                     sendEmergencyAlertsRequest();
                     //draw the circle to show the radius in default value
                     circleOptions = new CircleOptions().center(new LatLng(location.getLatitude(),
@@ -334,19 +330,64 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onInfoWindowClick(final Marker marker){
-        try {
-            JSONObject correspondObject = new JSONObject(markerTable.get(marker));
-            String id = correspondObject.getString("_id");
-            if(actions.has(id)){
-                correspondObject.put("action", actions.get(id));
+        //send get report request to grap the video clip
+        //TODO: in the future, if possible, the back-end system might want to save the video clip
+        //TODO: id in emergency alert too, hopefully. Then there is no need to send this request. :)
+        final StringRequest reportRequest = new StringRequest(Request.Method.POST,
+                url + urlGetReport,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        try {
+                            JSONObject correspondObject = new JSONObject(markerTable.get(marker));
+                            JSONObject respondJSON = new JSONObject(response);
+                            //add the videoclip id to the correspond JSON object
+                            correspondObject.put("videoClip", respondJSON.getString("videoClip"));
+                            String id = correspondObject.getString("_id");
+                            if(actions.has(id)){
+                                correspondObject.put("action", actions.get(id));
+                            }
+                            correspondObject.put("phone", userData.getString("phone"));
+                            correspondObject.put("password", userData.getString("password"));
+                            Bundle bundle = new Bundle();
+                            bundle.putString(key, correspondObject.toString());
+                            goToVideo.putExtras(bundle);
+                            startActivityForResult(goToVideo, videoCode);
+                        } catch (JSONException e){
+                            System.out.println(e.getMessage());
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        error.printStackTrace();
+                    }
+                }
+        ){
+            @Override
+            protected Map<String, String> getParams(){
+                Map<String, String>  params = new HashMap<>();
+                // the POST parameters:
+                try {
+                    JSONObject correspondObject = new JSONObject(markerTable.get(marker));
+                    params.put("phone", userData.getString("phone"));
+                    params.put("password", userData.getString("password"));
+                    params.put("reportId", correspondObject.getString("report"));
+                } catch(JSONException e){
+                    e.printStackTrace();
+                }
+                return params;
             }
-            Bundle bundle = new Bundle();
-            bundle.putString(key, correspondObject.toString());
-            goToVideo.putExtras(bundle);
-            startActivityForResult(goToVideo, videoCode);
-        } catch (JSONException e){
-            System.out.println(e.getMessage());
-        }
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                Map<String, String>  params = new HashMap<String, String>();
+                params.put("Content-Type", "application/x-www-form-urlencoded");
+                return params;
+            }
+        };
+        requestQueue.add(reportRequest);
     }
 
     private void drawMarkers () throws JSONException, ParseException{
@@ -377,28 +418,16 @@ public class MainActivity extends AppCompatActivity implements
         markerTable = newMarkerTable;*/
         boolean hasNew = false;
         Hashtable<Marker, String> newMarkerTable = new Hashtable<>();
-        Hashtable<String, JSONObject> emergencySet = new Hashtable<>();
-        //get all emergency ids
+        //add new markers
         for(int index = 0; index < emergencyAlerts.length(); index++){
             JSONObject tempJSONObject = emergencyAlerts.getJSONObject(index);
-            emergencySet.put(tempJSONObject.getString("report"), tempJSONObject);
-        }
-        //add new markers
-        for(int index = 0; index < badDriverReports.length(); index++){
-            JSONObject tempJSONObject = badDriverReports.getJSONObject(index);
-            String id = tempJSONObject.getString("_id");
-            if(!emergencySet.containsKey(id)){
-                continue;
-            }
-            JSONObject jsonObject = emergencySet.get(id);
-            jsonObject.put("videoClip", tempJSONObject.getString("videoClip"));
-            JSONArray coordinates = jsonObject.getJSONObject("location").
+            JSONArray coordinates = tempJSONObject.getJSONObject("location").
                     getJSONArray("coordinates");
             if(coordinates.getString(0).equals("null") ||
                     coordinates.getString(1).equals("null")){
                 continue;
             }
-            if(!markerTable.containsValue(jsonObject.toString())){
+            if(!markerTable.containsValue(tempJSONObject.toString())){
                 hasNew = true;
             }
             LatLng tempPoint = new LatLng(Double.parseDouble(coordinates.getString(1)),
@@ -406,18 +435,18 @@ public class MainActivity extends AppCompatActivity implements
             Marker tempMarker = mMap.addMarker(new MarkerOptions().draggable(true).position(tempPoint));
             SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
             SimpleDateFormat outputFormat = new SimpleDateFormat("HH:mm:ss");
-            Date date = inputFormat.parse(jsonObject.getString("reportedAt"));
+            Date date = inputFormat.parse(tempJSONObject.getString("reportedAt"));
             String formattedTime = outputFormat.format(date);
             tempMarker.setTitle(formattedTime);
-            if(jsonObject.has("reject") && jsonObject.getInt("reject") == 1){
+            if(tempJSONObject.has("reject") && tempJSONObject.getInt("reject") == 1){
                 tempMarker.setSnippet("Case is rejected");
             }
-            else if(jsonObject.has("resolved") && jsonObject.getInt("resolved") == 1){
+            else if(tempJSONObject.has("resolved") && tempJSONObject.getInt("resolved") == 1){
                 tempMarker.setSnippet("Case is resolved");
             }
-            else if(jsonObject.has("respond") && jsonObject.getInt("respond") >= 1){
+            else if(tempJSONObject.has("respond") && tempJSONObject.getInt("respond") >= 1){
                 StringBuilder sb = new StringBuilder();
-                for(int i = 1; i <= jsonObject.getInt("respond"); i++){
+                for(int i = 1; i <= tempJSONObject.getInt("respond"); i++){
                     sb.append("● ");
                 }
                 tempMarker.setSnippet("Number of responding: " + sb.toString());
@@ -426,7 +455,7 @@ public class MainActivity extends AppCompatActivity implements
                 tempMarker.setSnippet("Needs action!");
             }
 
-            newMarkerTable.put(tempMarker, jsonObject.toString());
+            newMarkerTable.put(tempMarker, tempJSONObject.toString());
         }
 
         if(hasNew) mp.start();
@@ -435,60 +464,6 @@ public class MainActivity extends AppCompatActivity implements
             entry.getKey().remove();
         }
         markerTable = newMarkerTable;
-    }
-
-    private void sendBadDriverReportRequest(){
-        //set both
-        //send out the post request to back-end API for all emergency alert reports
-        final StringRequest badDriverReportRequest = new StringRequest(Request.Method.POST,
-                url + urlReadAll,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        try{
-                            badDriverReports = new JSONArray(response);
-                            if(badDriverReports != null && emergencyAlerts != null)
-                                drawMarkers();
-                        }
-                        catch(Exception e){
-
-                        }
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        error.printStackTrace();
-                    }
-                }
-        ){
-            @Override
-            protected Map<String, String> getParams(){
-                Map<String, String>  params = new HashMap<>();
-                // the POST parameters:
-                params.put("collection", collectionBad);
-                /*JSONObject tempJSON = new JSONObject();
-                JSONObject locationJSON = new JSONObject();
-                try {
-                    tempJSON.put("radius", radius);
-                    locationJSON.put("lon", location.getLongitude());
-                    locationJSON.put("lat", location.getLatitude());
-                    tempJSON.put("location", locationJSON);
-                } catch(JSONException e){
-
-                }
-                params.put("data", tempJSON.toString());*/
-                return params;
-            }
-
-            @Override
-            public Map<String, String> getHeaders() throws AuthFailureError {
-                Map<String, String>  params = new HashMap<String, String>();
-                params.put("Content-Type", "application/x-www-form-urlencoded");
-                return params;
-            }
-        };
-        requestQueue.add(badDriverReportRequest);
     }
 
     private void sendEmergencyAlertsRequest(){
@@ -501,11 +476,10 @@ public class MainActivity extends AppCompatActivity implements
                     public void onResponse(String response) {
                         try{
                             emergencyAlerts = new JSONArray(response);
-                            if(badDriverReports != null && emergencyAlerts != null)
-                                drawMarkers();
+                            drawMarkers();
                         }
                         catch(Exception e){
-
+                            e.printStackTrace();
                         }
                     }
                 },
@@ -520,18 +494,15 @@ public class MainActivity extends AppCompatActivity implements
             protected Map<String, String> getParams(){
                 Map<String, String>  params = new HashMap<>();
                 // the POST parameters:
-                params.put("collection", collectionEmergency);
-                JSONObject tempJSON = new JSONObject();
-                JSONObject locationJSON = new JSONObject();
                 try {
-                    tempJSON.put("radius", radius);
-                    locationJSON.put("lon", location.getLongitude());
-                    locationJSON.put("lat", location.getLatitude());
-                    tempJSON.put("location", locationJSON);
+                    params.put("phone", userData.getString("phone"));
+                    params.put("password", userData.getString("password"));
+                    params.put("radius", Integer.toString(radius));
+                    params.put("lon", Double.toString(location.getLongitude()));
+                    params.put("lat", Double.toString(location.getLatitude()));
                 } catch(JSONException e){
-
+                    e.printStackTrace();
                 }
-                params.put("data", tempJSON.toString());
                 return params;
             }
 
@@ -608,7 +579,6 @@ public class MainActivity extends AppCompatActivity implements
                 else if(resultCode == Activity.RESULT_CANCELED){
                     //TODO currently we do nothing when user did not react to the case
                 }
-                    sendBadDriverReportRequest();
                     sendEmergencyAlertsRequest();
 
             }
@@ -626,7 +596,6 @@ public class MainActivity extends AppCompatActivity implements
         elapsedTime = updatedFreq;
         radius = updatedRadius;
 
-        sendBadDriverReportRequest();
         sendEmergencyAlertsRequest();
 
     }
